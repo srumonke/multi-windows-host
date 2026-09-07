@@ -1,0 +1,18 @@
+overrides:
+  variables:
+    - name: deployPath
+      type: String
+      value: C:\inetpub\CC_A
+      required: false
+    - name: appPool
+      type: String
+      value: ContinuousConversation_A
+      required: false
+    - name: siteName
+      type: String
+      value: testA
+      required: false
+    - name: healthPort
+      type: String
+      value: "80"
+      required: false
