@@ -1,0 +1,128 @@
+pipeline:
+  name: CC Multihost Deploy
+  identifier: cc_multihost_deploy
+  projectIdentifier: Cegid
+  orgIdentifier: default
+  description: Demo - 2 environments (test/prod), sites as infra definitions, each with 2 Windows VMs. Config comes from env+infra scoped service overrides.
+  tags:
+    demo: multihost
+  stages:
+    - stage:
+        name: Deploy to Site
+        identifier: deploy_to_site
+        type: Deployment
+        spec:
+          deploymentType: WinRm
+          service:
+            serviceRef: cc_multihost_demo
+          environment:
+            environmentRef: test
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: testA
+          execution:
+            steps:
+              - step:
+                  name: Deploy On Each Host
+                  identifier: deploy_on_each_host
+                  type: Command
+                  timeout: 20m
+                  spec:
+                    onDelegate: false
+                    environmentVariables:
+                      - name: DEPLOY_PATH
+                        type: String
+                        value: <+serviceVariables.deployPath>
+                      - name: APP_POOL
+                        type: String
+                        value: <+serviceVariables.appPool>
+                      - name: SITE_NAME
+                        type: String
+                        value: <+serviceVariables.siteName>
+                      - name: ENV_ID
+                        type: String
+                        value: <+env.identifier>
+                      - name: TARGET_HOST
+                        type: String
+                        value: <+instance.hostName>
+                    outputVariables: []
+                    commandUnits:
+                      - identifier: show_config
+                        name: Show Resolved Config
+                        type: Script
+                        spec:
+                          shell: PowerShell
+                          source:
+                            type: Inline
+                            spec:
+                              script: |
+                                Write-Host "=========================================="
+                                Write-Host " Resolved config on this host"
+                                Write-Host "=========================================="
+                                Write-Host "Harness target : $env:TARGET_HOST"
+                                Write-Host "Actual host    : $env:COMPUTERNAME"
+                                Write-Host "Environment    : $env:ENV_ID"
+                                Write-Host "------------------------------------------"
+                                Write-Host "siteName    : $env:SITE_NAME"
+                                Write-Host "deployPath  : $env:DEPLOY_PATH"
+                                Write-Host "appPool     : $env:APP_POOL"
+                                Write-Host "=========================================="
+                      - identifier: deploy_unit
+                        name: Write Release Marker
+                        type: Script
+                        spec:
+                          shell: PowerShell
+                          source:
+                            type: Inline
+                            spec:
+                              script: |
+                                $ErrorActionPreference = "Stop"
+                                New-Item -ItemType Directory -Path $env:DEPLOY_PATH -Force | Out-Null
+
+                                $marker = Join-Path $env:DEPLOY_PATH "release.txt"
+                                @(
+                                  "site=$env:SITE_NAME"
+                                  "host=$env:COMPUTERNAME"
+                                  "deployPath=$env:DEPLOY_PATH"
+                                  "appPool=$env:APP_POOL"
+                                  "pipelineExecution=<+pipeline.sequenceId>"
+                                ) | Set-Content -Path $marker
+
+                                Write-Host "--- release.txt ---"
+                                Get-Content $marker
+
+                                $html = "<html><body><h1>CC deployed to $env:SITE_NAME</h1><p>host: $env:COMPUTERNAME</p><p>build: <+pipeline.sequenceId></p></body></html>"
+                                Set-Content -Path "C:\inetpub\wwwroot\index.html" -Value $html
+                                Write-Host "IIS default page updated."
+                      - identifier: health_check
+                        name: Local Health Check
+                        type: Script
+                        spec:
+                          shell: PowerShell
+                          source:
+                            type: Inline
+                            spec:
+                              script: |
+                                Write-Host "Health checking IIS locally on $env:COMPUTERNAME ..."
+                                try {
+                                  $r = Invoke-WebRequest -Uri "http://localhost/" -UseBasicParsing -TimeoutSec 30
+                                  Write-Host "HTTP $($r.StatusCode) on $env:COMPUTERNAME"
+                                  Write-Host $r.Content
+                                  Write-Host "Health check PASSED"
+                                } catch {
+                                  Write-Host "Health check FAILED: $_"
+                                  exit 1
+                                }
+                  strategy:
+                    repeat:
+                      items: <+stage.output.hosts>
+                  when:
+                    stageStatus: Success
+            rollbackSteps: []
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
