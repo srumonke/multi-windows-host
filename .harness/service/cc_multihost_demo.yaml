@@ -1,0 +1,30 @@
+service:
+  name: CC Multihost Demo
+  identifier: cc_multihost_demo
+  description: WinRM service for the multi-host testA/testB/testC infra-definition demo. No artifact - script-only so the demo runs standalone.
+  tags:
+    app: cc
+    platform: windows
+    demo: multihost
+  orgIdentifier: default
+  projectIdentifier: Cegid
+  serviceDefinition:
+    type: WinRm
+    spec:
+      variables:
+        - name: deployPath
+          type: String
+          required: false
+          value: C:\inetpub\ContinuousConversation
+        - name: appPool
+          type: String
+          required: false
+          value: ContinuousConversation
+        - name: siteName
+          type: String
+          required: false
+          value: DEFAULT_UNSET
+        - name: healthPort
+          type: String
+          required: false
+          value: "80"
